@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TripMate</title>
+<style>
+  :root {
+    --accent: #A32020;      /* 포인트 레드: 주요 버튼, 추천안, 강조 */
+    --accent-tint: #F6E9E9; /* 불확실 배지 배경 */
+    --ink: #000000;         /* 기본 텍스트, 헤더 배경, 고정 일정 */
+    --ink-2: #333333;       /* 보조 텍스트 */
+    --gray-1: #555555; --gray-2: #888888; --line: #CCCCCC; --bg-soft: #EEEEEE;
+    --bg: #FFFFFF;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; }
+  h1, h2, h3, .banner b { font-family: Georgia, serif; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 20px; background: var(--ink); color: var(--bg); border-bottom: 3px solid var(--accent); position: sticky; top: 0; z-index: 5; }
+  header h1 { font-size: 20px; margin: 0; }
+  header .sub { color: var(--bg-soft); }
+  header .sp { flex: 1; }
+  header label { color: var(--bg); white-space: nowrap; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+  button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+  button.outline { border-color: var(--ink); }
+  button:disabled { opacity: .5; cursor: default; }
+  main { display: grid; grid-template-columns: 320px minmax(0, 1fr) 380px; min-height: calc(100vh - 60px); }
+  aside, section { padding: 16px 20px; }
+  aside.inputs { border-right: 1px solid var(--line); }
+  aside.result { border-left: 1px solid var(--line); }
+  h2 { font-size: 15px; color: var(--ink); margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+  h2:first-child { margin-top: 0; }
+  h2 .muted { font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; font-size: 12px; font-weight: 400; }
+
+  /* input form */
+  .field { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 8px; margin: 8px 0; }
+  .field.stack { display: block; }
+  .field.stack .pair { margin-top: 4px; }
+  .field label { color: var(--ink); white-space: nowrap; }
+  .field .src { color: var(--gray-1); font-size: 11px; margin-left: 2px; }
+  .pair { display: flex; gap: 6px; align-items: center; }
+  .field input { width: 84px; min-width: 72px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; font-variant-numeric: tabular-nums; background: var(--bg); color: var(--ink); }
+  .field input.time { width: 72px; text-align: center; }
+  /* differs from the D01~D08 default: soft background + red dot on the left */
+  .field input.changed { background: radial-gradient(circle at 8px 50%, var(--accent) 3px, transparent 3.5px), var(--bg-soft); padding-left: 16px; }
+  .field input.time.changed { width: 80px; }
+  .field input.invalid { border: 2px solid var(--accent); }
+  .field .msg { flex-basis: 100%; color: var(--accent); font-size: 12px; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); vertical-align: 1px; }
+  textarea { width: 100%; height: 220px; font: 12px/1.4 Consolas, monospace; border: 1px solid var(--line); border-radius: 6px; padding: 8px; color: var(--ink); }
+  details summary { cursor: pointer; color: var(--gray-1); margin-top: 16px; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .err { color: var(--accent); font-weight: 600; white-space: pre-wrap; }
+  .stale-note { display: none; margin: 0 0 10px; padding: 6px 10px; background: var(--bg-soft); border-left: 4px solid var(--gray-2); color: var(--ink-2); font-size: 13px; }
+  body.stale .stale-note { display: block; }
+  body.stale main > section > :not(.stale-note), body.stale aside.result { opacity: .4; }
+  .banner ul { margin: 6px 0 0; padding-left: 18px; }
+  .err:not(:empty) { margin: 0 0 12px; padding: 8px 10px; background: var(--accent-tint); border-left: 4px solid var(--accent); border-radius: 4px; }
+
+  /* recommendation + timeline */
+  .banner { padding: 10px 14px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 6px; margin-bottom: 14px; color: var(--ink-2); }
+  .banner.risky, .banner.infeasible { background: var(--accent-tint); color: var(--accent); }
+  .banner b { display: block; font-size: 18px; color: var(--ink); margin-top: 2px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tab { padding: 4px 10px; border-radius: 999px; font-size: 12px; }
+  .tab.rec { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .tab.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .tab.rec.active { background: var(--accent); border-color: var(--accent); }
+  .tl-item { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; padding: 4px 0; }
+  .tl-time { text-align: right; color: var(--gray-1); font-variant-numeric: tabular-nums; padding-top: 8px; font-size: 13px; }
+  .block { border-radius: 6px; padding: 8px 12px; border: 1px solid var(--line); background: var(--bg); }
+  .block.hard { border-left: 4px solid var(--ink); }
+  .block.flex { border: 1px dashed var(--gray-2); }
+  .block.changed { border-color: var(--accent); }
+  .block.leg { border: none; padding: 2px 12px; color: var(--gray-1); font-size: 13px; }
+  .block .t { font-weight: 600; }
+  .block .d { color: var(--gray-1); font-size: 12px; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; margin: 3px 4px 0 0; background: var(--bg-soft); color: var(--ink-2); }
+  .badge.warn { background: var(--accent-tint); color: var(--accent); }
+  .badge.lock { background: var(--ink); color: var(--bg); }
+  .badge.chg { background: var(--bg); color: var(--accent); border: 1px solid var(--accent); }
+  .chip { display: inline-block; font-size: 11px; padding: 0 5px; border-radius: 4px; background: var(--bg-soft); color: var(--ink-2); margin-left: 3px; cursor: help; border: 1px solid var(--bg-soft); vertical-align: 1px; }
+  .chip.user { border-color: var(--accent); }
+  .chip.assume { border: 1px dashed var(--gray-2); }
+
+  /* side cards + tables */
+  ol { padding-left: 20px; margin: 0; }
+  ol li { margin: 6px 0; }
+  .card { border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; }
+  .card h3 { margin: 0 0 6px; font-size: 16px; }
+  .card.unc { border-left: 4px solid var(--accent); }
+  .card.ai { background: var(--bg-soft); border-color: var(--bg-soft); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--gray-1); font-weight: 500; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.rec td { background: var(--accent-tint); }
+  .pill { font-size: 11px; padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
+  .pill.fixed { background: var(--ink); color: var(--bg); }
+  .pill.flexp { background: var(--bg); color: var(--ink-2); border: 1px dashed var(--gray-2); }
+  .pill.risk { background: var(--accent-tint); color: var(--accent); }
+  .muted { color: var(--gray-1); }
+  .table-wrap { overflow-x: auto; }
+  #tip { position: fixed; max-width: 360px; background: var(--ink); color: var(--bg); padding: 8px 10px; border-radius: 6px; font-size: 12px; pointer-events: none; display: none; z-index: 20; }
+
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 320px minmax(0, 1fr); }
+    aside.result { grid-column: 1 / -1; border-left: none; border-top: 1px solid var(--line); }
+  }
+  @media (max-width: 700px) {
+    main { grid-template-columns: 1fr; }
+    aside.inputs { border-right: none; border-bottom: 1px solid var(--line); }
+    header .sub { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>TripMate</h1>
+  <span class="sub" id="subtitle">여행 일정 변경 대응</span>
+  <span class="sp"></span>
+  <label><input type="checkbox" id="useLlm"> AI 요약</label>
+  <button id="reset" class="outline">기본값 복원</button>
+  <button class="primary" id="run">재계획 ▶</button>
+</header>
+<main>
+  <aside class="inputs">
+    <div class="err" id="err"></div>
+    <div id="fields"></div>
+    <p class="muted" style="font-size:12px"><span class="dot"></span> 표시와 회색 배경 칸은 기본 자료(D01~D08)와 다른 값입니다. 결과에서는 <span class="chip user">입력값</span> 근거로 표시됩니다. 시간은 24시간제 HH:MM(예: 15:00)으로 입력합니다.</p>
+    <details>
+      <summary>전체 시나리오 JSON (고급)</summary>
+      <textarea id="json"></textarea>
+      <div class="row">
+        <button id="applyJson">JSON 적용</button>
+        <button id="download">다운로드</button>
+        <label><button type="button" onclick="document.getElementById('file').click()">파일 업로드</button>
+          <input type="file" id="file" accept=".json" hidden></label>
+      </div>
+    </details>
+  </aside>
+  <section>
+    <div class="stale-note">⚠ 이전 입력 기준 결과입니다. 왼쪽 입력을 고친 뒤 재계획하세요.</div>
+    <div id="banner"></div>
+    <div class="tabs" id="tabs"></div>
+    <div class="tl" id="timeline"></div>
+    <h2>고정 조건과 변경 가능 조건</h2>
+    <div class="table-wrap"><table id="constraints"></table></div>
+    <h2>후보 비교 <span class="muted" style="text-transform:none">(안 이름 A~F는 입력이 바뀌어도 고정, 순위는 벌점이 낮은 순, 여유 = 공연 입장 마감까지 최악~최선)</span></h2>
+    <div class="table-wrap"><table id="compare"></table></div>
+  </section>
+  <aside class="result">
+    <div id="ai"></div>
+    <div class="card"><h3>추천 이유</h3><ol id="reasons"></ol></div>
+    <div class="card unc"><h3>⚠ 불확실성</h3><ol id="unc"></ol></div>
+    <div class="card"><h3>지금 확인할 항목</h3><ol id="checks"></ol></div>
+    <div class="card"><h3>선택한 안의 감점 내역</h3><ol id="pen"></ol></div>
+  </aside>
+</main>
+<div id="tip"></div>
+<script>
+const FIELDS = [
+  ["날씨 (예보)", [
+    ["강수확률 %", "weather.rain_prob", "number", "D04"],
+    ["강수 시간대", ["weather.rain_window.0", "weather.rain_window.1"], "time", "D04"],
+    ["풍속 m/s", "weather.wind_ms", "number", "D04"],
+  ]],
+  ["교통", [
+    ["지하철 추가 지연 (분)", ["disruptions.0.transit_extra.0", "disruptions.0.transit_extra.1"], "number", "D06"],
+    ["점검 시간대", ["disruptions.0.window.0", "disruptions.0.window.1"], "time", "D06"],
+    ["점검 중 택시 소요 (분)", ["disruptions.0.taxi_during.0", "disruptions.0.taxi_during.1"], "number", "D06"],
+  ]],
+  ["예약·입장 (확정)", [
+    ["미술관 입장", ["stops#M.entry_window.0", "stops#M.entry_window.1"], "time", "D02"],
+    ["식당 도착 마감", "stops#R.entry_window.1", "time", "D02"],
+    ["전망대 입장 마감", "stops#O.last_entry", "time", "D02"],
+    ["공연 입장 마감", "stops#C.entry_deadline", "time", "D02"],
+    ["판단 시각 (환불 기한 확인용)", "meta.decision_time", "time", "D02", "미술관 환불 기한(09:30)이 지났는지 판단하는 데만 씁니다. 이 시각 이후부터 다시 계획하지는 않습니다."],
+  ]],
+  ["일행 선호", [
+    ["교통비 예산(원)", "preferences.budget_krw", "number", "D07"],
+    ["택시 최대 횟수", "preferences.max_taxi_rides", "number", "D07"],
+    ["우천 시 야외 최대(분)", "preferences.max_outdoor_in_rain_min", "number", "D07"],
+    ["우천 판단 기준 %", "preferences.rain_prob_threshold", "number", "가정", "이 강수확률 이상이면 '비 가능성 높음'으로 판단"],
+    ["공연 여유 목표(분)", "preferences.target_buffer_min", "number", "가정", "공연 입장 마감 전에 남기고 싶은 여유 시간"],
+    ["택시 1회 요금 (원)", ["taxi.fare_per_ride_krw.0", "taxi.fare_per_ride_krw.1"], "number", "가정"],
+  ]],
+];
+
+let base = null, scenario = null, result = null, selected = null;
+let invalid = {};   // path -> raw text that failed validation (kept out of the scenario)
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function resolve(obj, path, value) {
+  const keys = path.split(".");
+  for (let i = 0; i < keys.length; i++) {
+    let k = keys[i];
+    if (k.includes("#")) {
+      const [arr, id] = k.split("#");
+      obj = obj[arr].find((x) => x.id === id);
+      if (!obj) return undefined;
+      continue;
+    }
+    if (i === keys.length - 1) {
+      if (value !== undefined) obj[k] = value;
+      return obj[k];
+    }
+    obj = obj[k];
+    if (obj === undefined) return undefined;
+  }
+  return obj;
+}
+
+function fieldLabel(path) {
+  for (const [, rows] of FIELDS) for (const [label, paths] of rows) {
+    const list = Array.isArray(paths) ? paths : [paths];
+    const i = list.indexOf(path);
+    if (i >= 0) return list.length > 1 ? `${label} ${i === 0 ? "시작" : "끝"}` : label;
+  }
+  return path;
+}
+
+function renderFields() {
+  const html = FIELDS.map(([title, rows]) => `<h2>${title}</h2>` + rows.map(([label, paths, type, src, hint]) => {
+    const list = Array.isArray(paths) ? paths : [paths];
+    const inputs = list.map((p, i) => {
+      const v = resolve(scenario, p);
+      const bad = p in invalid;
+      const changed = !bad && JSON.stringify(v) !== JSON.stringify(resolve(base, p));
+      const attrs = type === "time"
+        ? `type="text" inputmode="numeric" maxlength="5" placeholder="15:00" autocomplete="off"`
+        : `type="number"`;
+      const aria = list.length > 1 ? `${label} ${i === 0 ? "시작" : "끝"}` : label;
+      return `<input data-path="${p}" data-kind="${type}" ${attrs} aria-label="${esc(aria)}" class="${type === "time" ? "time" : ""} ${changed ? "changed" : ""} ${bad ? "invalid" : ""}"
+        value="${esc(bad ? invalid[p] : v ?? "")}" ${v === undefined ? "disabled" : ""} ${bad ? 'aria-invalid="true"' : ""}>`;
+    }).join("<span class='muted'>~</span>");
+    const msg = list.some((p) => p in invalid)
+      ? `<div class="msg">⚠ ${type === "time" ? "24시간제 HH:MM 형식으로 입력하세요 (예: 15:00)" : "숫자를 입력하세요"}</div>` : "";
+    const stack = list.length > 1 || label.length > 12 ? "stack" : "";
+    return `<div class="field ${stack}"><label ${hint ? `title="${esc(hint)}"` : ""}>${label} <span class="src">${src}</span></label><div class="pair">${inputs}</div>${msg}</div>`;
+  }).join("")).join("");
+  $("fields").innerHTML = html;
+  $("fields").querySelectorAll("input").forEach((el) => el.addEventListener("change", () => {
+    const p = el.dataset.path, raw = el.value.trim();
+    let v;
+    if (el.dataset.kind === "time") {
+      const m = raw.match(/^(\d{1,2}):?(\d{2})$/);   // accept 9:30, 0930 → 09:30
+      v = m ? `${m[1].padStart(2, "0")}:${m[2]}` : raw;
+      if (!TIME_RE.test(v)) v = undefined;
+    } else {
+      v = raw === "" ? undefined : Number(raw);
+      if (v !== undefined && !Number.isFinite(v)) v = undefined;
+    }
+    if (v === undefined) {
+      invalid[p] = raw;
+    } else {
+      delete invalid[p];
+      resolve(scenario, p, v);
+    }
+    syncJson(); renderFields();
+  }));
+}
+
+function syncJson() { $("json").value = JSON.stringify(scenario, null, 2); }
+
+function chip(s) {
+  const doc = result?.documents?.[s];
+  const cls = s === "입력값" ? "user" : s === "가정" ? "assume" : "";
+  const tip = doc || (s === "입력값" ? "사용자가 기본 자료와 다르게 입력한 값" : s === "가정" ? "제공 자료에 없어 가정한 값 (입력 폼에서 수정 가능)" : s);
+  return `<span class="chip ${cls}" data-tip="${esc(s + ": " + tip)}">${esc(s)}</span>`;
+}
+const chips = (arr) => (arr || []).map(chip).join("");
+
+async function run() {
+  $("err").textContent = "";
+  const bad = Object.keys(invalid);
+  if (bad.length) {
+    $("err").textContent = "입력 형식 오류로 재계획하지 않았습니다.\n" +
+      bad.map((p) => `· ${fieldLabel(p)}: "${invalid[p]}" → ${/window|entry|last_entry|deadline|decision_time/.test(p) ? "HH:MM (예: 15:00)" : "숫자"}`).join("\n");
+    $("err").scrollIntoView({ block: "nearest" });
+    if (result) document.body.classList.add("stale");
+    return;
+  }
+  $("run").disabled = true;
+  const runId = ++runSeq;
+  try {
+    // rule-based result first, then the optional AI summary as a second request
+    const data = await postPlan(false);
+    result = data; selected = data.recommended;
+    document.body.classList.remove("stale");
+    if ($("useLlm").checked) result.llm = { pending: true };
+    render();
+    if ($("useLlm").checked) {
+      try { const withAi = await postPlan(true); if (runId === runSeq) { result.llm = withAi.llm; render(); } }
+      catch (e) { if (runId === runSeq) { result.llm = { used: false, error: "AI 요약 요청 실패: " + e.message }; render(); } }
+    }
+  } catch (e) {
+    $("err").textContent = "실행 오류: " + e.message;
+    if (result) document.body.classList.add("stale");
+  } finally { $("run").disabled = false; }
+}
+
+let runSeq = 0;
+async function postPlan(useLlm) {
+  const res = await fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scenario, use_llm: useLlm }) });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function render() {
+  const rec = result.candidates.find((c) => c.id === result.recommended);
+  const msg = { safe: "확정 조건(예약·공연 입장)을 최악의 이동시간에서도 지킬 수 있는 안입니다.",
+    risky: "⚠ 주의: 이동이 늦어지면 확정 조건을 넘길 수 있습니다.",
+    infeasible: "⚠ 경고: 현재 입력으로는 확정 조건을 모두 지키는 안이 없습니다." }[result.status];
+  $("subtitle").textContent = result.title;
+  const viol = rec.violations.length ? `<ul>${rec.violations.map((v) =>
+    `<li>${esc(v.name)} ${v.limit}: ${v.over_best ? `빠르면 ${v.over_best}분` : "빠르면 지킬 수 있으나"}, 늦으면 ${v.over_worst}분 초과</li>`).join("")}</ul>` : "";
+  $("banner").innerHTML = result.status === "infeasible"
+    ? `<div class="banner infeasible">⚠ 확정 조건을 모두 지키는 안 없음 – 위반이 가장 적은 안: ${rec.id}<b>${esc(rec.label)}</b>${viol}</div>`
+    : `<div class="banner ${result.status}">★ 추천안 ${rec.id} · ${msg}<b>${esc(rec.label)}</b>${viol}</div>`;
+  $("tabs").innerHTML = result.candidates.map((c) =>
+    `<button class="tab ${c.id === selected ? "active" : ""} ${c.id === result.recommended ? "rec" : ""}" data-id="${c.id}" title="${esc(c.label)}">${c.id === result.recommended ? '<span class="star">★</span> ' : ""}${c.id}${c.is_original ? " (원안)" : ""}${c.safe ? "" : " ⚠"}</button>`).join("");
+  $("tabs").querySelectorAll(".tab").forEach((b) => b.onclick = () => { selected = b.dataset.id; render(); });
+  const cur = result.candidates.find((c) => c.id === selected);
+  $("timeline").innerHTML = `<p class="muted" style="margin:0 0 8px">${esc(cur.label)} — 시간은 <b>이동이 빠를 때~늦을 때</b> 범위입니다.</p>` + cur.timeline.map((t) => {
+    if (t.type === "leg") {
+      return `<div class="tl-item"><div class="tl-time">${t.time}</div><div class="block leg">${t.mode === "taxi" ? "🚕" : "🚇"} ${esc(t.title)} · ${esc(t.detail)} ${chips(t.sources)}
+        ${(t.flags || []).map((f) => `<span class="badge warn">⚠ ${esc(f)}</span>`).join("")}</div></div>`;
+    }
+    const cls = t.constraint === "hard" ? "hard" : "flex";
+    return `<div class="tl-item"><div class="tl-time">${t.time}${t.end ? "<br>~ " + t.end : ""}</div>
+      <div class="block ${cls} ${t.changed ? "changed" : ""}">
+        <div class="t">${t.constraint === "hard" ? "🔒" : "◌"} ${esc(t.title)} ${chips(t.sources)}</div>
+        ${t.detail ? `<div class="d">${esc(t.detail)}${t.arrive && t.arrive !== t.time ? ` · 도착 ${t.arrive}` : ""}</div>` : ""}
+        <span class="badge ${t.constraint === "hard" ? "lock" : ""}">${t.constraint === "hard" ? "고정" : "변경 가능"}</span>
+        ${t.changed ? '<span class="badge chg">변경됨</span>' : ""}
+        ${(t.flags || []).map((f) => `<span class="badge warn">⚠ ${esc(f)}</span>`).join("")}
+      </div></div>`;
+  }).join("");
+  const li = (arr) => arr.map((r) => `<li>${esc(r.text)} ${chips(r.sources)}</li>`).join("");
+  $("reasons").innerHTML = li(result.reasons);
+  $("unc").innerHTML = li(result.uncertainties);
+  $("checks").innerHTML = li(result.checks);
+  $("pen").innerHTML = cur.penalties.length ? cur.penalties.map((p) => `<li>${esc(p.text)} <span class="muted">(+${p.points})</span> ${chips(p.sources)}</li>`).join("") : "<li class='muted'>감점 없음</li>";
+  $("constraints").innerHTML = "<tr><th>항목</th><th>구분</th><th>조건</th><th>이유</th></tr>" + result.constraints.map((c) =>
+    `<tr><td>${esc(c.name)} ${chips(c.sources)}</td><td><span class="pill ${c.type === "고정" ? "fixed" : "flexp"}">${c.type}</span></td><td>${esc(c.rule)}</td><td class="muted">${esc(c.why)}</td></tr>`).join("");
+  $("compare").innerHTML = "<tr><th>순위</th><th>안</th><th>구성</th><th class='num'>벌점</th><th class='num'>여유(분)</th><th class='num'>우중 야외</th><th class='num'>택시</th><th class='num'>교통비</th></tr>" + [...result.candidates].sort((a, b) => a.rank - b.rank).map((c) => {
+    const m = c.metrics;
+    const cost = m.cost_krw[0] === m.cost_krw[1] ? m.cost_krw[0].toLocaleString() : `${m.cost_krw[0].toLocaleString()}~${m.cost_krw[1].toLocaleString()}`;
+    return `<tr class="${c.id === result.recommended ? "rec" : ""}"><td>${c.rank}</td><td>${c.id}${c.id === result.recommended ? " ★" : ""}</td>
+      <td>${esc(c.label)} ${c.is_original ? '<span class="pill flexp">원안</span>' : ""} ${c.safe ? "" : '<span class="pill risk">⚠ 마감 위험</span>'}</td>
+      <td class="num">${c.penalty}</td><td class="num">${m.buffer_worst}~${m.buffer_best}</td><td class="num">${m.rain_overlap_min}분</td><td class="num">${m.taxi_rides}</td><td class="num">${cost}</td></tr>`;
+  }).join("");
+  const ai = result.llm;
+  $("ai").innerHTML = ai ? ai.pending ? `<div class="card ai muted">AI 요약 생성 중… (규칙 기반 결과는 이미 표시됨)</div>` : (ai.used
+    ? `<div class="card ai"><h3>AI 요약 <span class="muted" style="font-weight:400">(${esc(ai.model)}, 규칙 기반 결과를 요약)</span></h3><div>${esc(ai.text).replace(/\[([^\]]+)\]/g, (m, s) => chip(s))}</div></div>`
+    : `<div class="card ai muted">${esc(ai.error)}</div>`) : "";
+}
+
+document.addEventListener("mouseover", (e) => {
+  const t = e.target.closest("[data-tip]");
+  const tip = $("tip");
+  if (!t) { tip.style.display = "none"; return; }
+  tip.textContent = t.dataset.tip;
+  tip.style.display = "block";
+  const r = t.getBoundingClientRect();
+  tip.style.left = Math.min(r.left, innerWidth - 380) + "px";
+  tip.style.top = (r.bottom + 6) + "px";
+});
+
+$("run").onclick = run;
+$("reset").onclick = () => { invalid = {}; scenario = structuredClone(base); syncJson(); renderFields(); run(); };
+$("applyJson").onclick = () => {
+  try { scenario = JSON.parse($("json").value); invalid = {}; renderFields(); run(); }
+  catch (e) { $("err").textContent = "JSON 파싱 오류: " + e.message; }
+};
+$("download").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(scenario, null, 2)], { type: "application/json" }));
+  a.download = "scenario.json"; a.click();
+};
+$("file").onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  $("json").value = await f.text(); $("applyJson").click(); e.target.value = "";
+};
+
+(async () => {
+  base = await (await fetch("/api/default")).json();
+  try {
+    const cfg = await (await fetch("/api/config")).json();
+    $("useLlm").checked = cfg.llm_available;
+    $("useLlm").parentElement.title = cfg.llm_available ? `AI 요약 사용 가능 (${cfg.llm_model})` : "ANTHROPIC_API_KEY가 없거나 anthropic 패키지가 없어 규칙 기반 설명만 표시합니다";
+  } catch {}
+  scenario = structuredClone(base);
+  syncJson(); renderFields(); run();
+})();
+</script>
+</body>
+</html>

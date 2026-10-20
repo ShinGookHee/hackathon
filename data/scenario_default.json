@@ -1,0 +1,91 @@
+{
+  "meta": {
+    "title": "토요일 서울 여행 (친구 4명)",
+    "date": "2026-10-10",
+    "decision_time": "09:25",
+    "party_size": 4
+  },
+  "documents": {
+    "D01": "서울역 09:20 도착, 21:30 출발. 원래 일정 10:30 미술관 M → 13:00 식당 R → 15:00 한강공원 P → 17:00 전망대 O → 19:00 공연장 C. 공연이 최우선(18:40 입장 마감), 미술관은 2명이 꼭 원함, 야외 일정은 날씨가 나쁘면 변경 가능. 서두르지 않는 것을 선호.",
+    "D02": "미술관 M 10:30~11:00 입장, 최대 2시간 관람, 09:30까지 취소 시 전액 환불. 식당 R 13:00 예약, 15분까지 지각 허용. 전망대 O 실내 전망층 18:00까지 입장. 공연장 C 환불 불가, 19:00 시작, 18:40 입장 마감.",
+    "D03": "평상시 이동시간: 서울역→M 25~35분, M→R 20~25분, R→P 25~35분, P→O 30~45분, O→C 20~30분(대기시간 미포함 추정치). 택시는 10~20분 빠를 수 있으나 토요일 오후엔 차이가 없을 수도 있음.",
+    "D04": "07:00 예보 14~17시 강수확률 60%, 풍속 6m/s → 09:00 갱신 15~18시 강수확률 80%, 풍속 9m/s. 강수 위치·강도는 변동 가능, 80%가 반드시 비를 뜻하지 않음. 비가 많이 오면 한강 체류 30분 이내로 줄이거나 실내로 대체 가능.",
+    "D05": "전망대 O 강풍 시 야외 데크 폐쇄 가능(미확정), 실내 전망층 정상 운영 예정. 미술관 M 상설전 정상, 특별전 일부 12:00~13:30 점검(10:30 예약 영향 없음). 한강공원 P 폐쇄 공지 없음, 우천 시 일부 야외 프로그램 현장 취소 가능.",
+    "D06": "15:00~17:00 P→O 지하철 구간 선로 점검, 약 20~30분 추가 소요 가능. 대체 버스 35~50분, 택시 20~35분. 정확한 지연은 현장 상황에 따라 다름.",
+    "D07": "4명 합계 교통비 6만 원 이내, 택시는 한 번 정도 가능. 비 올 때 30분 이상 연속 야외 체류는 피하고 싶음. 실내 카페·전망대 실내층 대체 가능. 한 명은 한강공원을 원하지만 공연보다 우선하지 않음.",
+    "D08": "강수·데크 폐쇄·지연시간을 확정 표현하지 말 것. 공연 입장 마감과 예약 규칙은 확정 조건, 야외 일정 유지와 이동수단은 상황에 따라 변경 가능. 좋은 일정은 고정 조건을 지키며 우선순위와 불확실성을 반영한 일정."
+  },
+  "start": { "name": "서울역 도착", "time": "09:20", "sources": ["D01"] },
+  "stops": [
+    {
+      "id": "M", "name": "미술관 M", "constraint": "hard", "indoor": true,
+      "entry_window": ["10:30", "11:00"], "stay": 120, "min_stay": 60,
+      "refund_deadline": "09:30",
+      "notes": "특별전 일부 12:00~13:30 점검 (상설전 정상)",
+      "sources": ["D01", "D02", "D05"]
+    },
+    {
+      "id": "R", "name": "식당 R", "constraint": "hard", "indoor": true,
+      "entry_window": ["13:00", "13:15"], "stay": 90, "min_stay": 60,
+      "sources": ["D02"]
+    },
+    {
+      "id": "P", "name": "한강공원 P", "constraint": "soft", "indoor": false,
+      "stay": 90, "min_stay": 30, "wanted_by": 1,
+      "alternatives": {
+        "short_stay": 30,
+        "indoor_substitute": { "name": "한강 인근 실내 카페", "stay": 60 }
+      },
+      "notes": "우천 시 일부 야외 프로그램 현장 취소 가능",
+      "sources": ["D01", "D04", "D05", "D07"]
+    },
+    {
+      "id": "O", "name": "전망대 O (실내 전망층)", "constraint": "soft", "indoor": true,
+      "last_entry": "18:00", "stay": 60, "min_stay": 30, "flex_stay": true,
+      "outdoor_deck": true,
+      "sources": ["D02", "D05"]
+    },
+    {
+      "id": "C", "name": "공연장 C", "constraint": "hard", "indoor": true,
+      "entry_deadline": "18:40", "event_start": "19:00",
+      "sources": ["D01", "D02"]
+    }
+  ],
+  "legs": [
+    { "from": "START", "to": "M", "transit": [25, 35], "sources": ["D03"] },
+    { "from": "M", "to": "R", "transit": [20, 25], "sources": ["D03"] },
+    { "from": "R", "to": "P", "transit": [25, 35], "sources": ["D03"] },
+    { "from": "P", "to": "O", "transit": [30, 45], "sources": ["D03"] },
+    { "from": "O", "to": "C", "transit": [20, 30], "sources": ["D03"] }
+  ],
+  "taxi": {
+    "faster_by": [10, 20],
+    "fare_per_ride_krw": [15000, 25000],
+    "fare_source": "assumption",
+    "sources": ["D03"]
+  },
+  "disruptions": [
+    {
+      "from": "P", "to": "O", "window": ["15:00", "17:00"],
+      "transit_extra": [20, 30],
+      "taxi_during": [20, 35],
+      "sources": ["D06"]
+    }
+  ],
+  "weather": {
+    "rain_prob": 80, "rain_window": ["15:00", "18:00"], "wind_ms": 9,
+    "previous": { "rain_prob": 60, "rain_window": ["14:00", "17:00"], "wind_ms": 6 },
+    "sources": ["D04"]
+  },
+  "preferences": {
+    "budget_krw": 60000,
+    "transit_fare_per_person_krw": 1500,
+    "transit_fare_source": "assumption",
+    "max_taxi_rides": 1,
+    "max_outdoor_in_rain_min": 30,
+    "rain_prob_threshold": 60,
+    "deck_wind_threshold_ms": 8,
+    "target_buffer_min": 20,
+    "sources": ["D07", "D01"]
+  }
+}
