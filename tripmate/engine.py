@@ -34,6 +34,39 @@ def won_range(lo, hi):
     return won(lo) if lo == hi else f"{won(lo)}~{won(hi)}"
 
 
+# Final consonant of how the last character is read aloud: (has_batchim, is_rieul).
+# Latin letters and digits use their Korean names (L 엘, M 엠, 1 일, 3 삼 ...).
+LETTER_FINAL = {"L": (True, True), "R": (True, True), "M": (True, False), "N": (True, False)}
+DIGIT_FINAL = {"0": (True, False), "1": (True, True), "3": (True, False), "6": (True, False),
+               "7": (True, True), "8": (True, True)}
+
+
+def final_consonant(word):
+    w = word.rstrip(" )]'\"")
+    if not w:
+        return False, False
+    c = w[-1]
+    if "가" <= c <= "힣":
+        jong = (ord(c) - 0xAC00) % 28
+        return jong != 0, jong == 8
+    if c.isascii() and c.isalpha():
+        return LETTER_FINAL.get(c.upper(), (False, False))
+    return DIGIT_FINAL.get(c, (False, False))
+
+
+def particle(word, pair):
+    """Pick the particle for `word`: pair is '을/를', '이/가', '은/는', '과/와' or '으로/로'."""
+    with_final, without = pair.split("/")
+    has, rieul = final_consonant(word)
+    if pair == "으로/로":
+        return without if not has or rieul else with_final
+    return with_final if has else without
+
+
+def josa(word, pair):
+    return f"{word}{particle(word, pair)}"
+
+
 def get_path(obj, path):
     for key in path.split("."):
         if isinstance(obj, list):
@@ -421,12 +454,12 @@ class Planner:
             st = self.stop_by_id[sid]
             if kind == "full":
                 alts = [e for e in evs if e["cand"]["modes"] == best["cand"]["modes"] and e["cand"]["stop_choice"][sid][0] != "full"]
-                head = f"{st['name']}을(를) 원안({stay}분)대로 유지합니다."
+                head = f"{josa(st['name'], '을/를')} 원안({stay}분)대로 유지합니다."
                 out.append(self.diff_reason(head, best, alts[0] if alts else None, "줄이거나 대체하면"))
             else:
                 alt = self.find(evs, {**best["cand"]["stop_choice"], sid: ("full", st["stay"])}, best["cand"]["modes"])
                 verb = f"{stay}분으로 줄인" if kind == "short" else "실내 카페로 대체한"
-                out.append(self.diff_reason(f"{st['name']}을(를) {verb} 이유:", best, alt, f"원안({st['stay']}분)대로 가면"))
+                out.append(self.diff_reason(f"{josa(st['name'], '을/를')} {verb} 이유:", best, alt, f"원안({st['stay']}분)대로 가면"))
         for leg, mode in best["cand"]["modes"].items():
             na, nb = self.stop_by_id[leg[0]]["name"], self.stop_by_id[leg[1]]["name"]
             alt = self.find(evs, best["cand"]["stop_choice"], {**best["cand"]["modes"], leg: "transit" if mode == "taxi" else "taxi"})
@@ -449,7 +482,7 @@ class Planner:
         if runner:
             gains, _ = self.penalty_diff(best, runner)
             diff = " / ".join(p["text"] for p in gains[:2]) or "차이가 작음"
-            out.append({"text": f"차선안 {runner['id']}({runner['label']})은 '{diff}' 때문에 벌점이 {round(runner['penalty'] - best['penalty'], 1)}점 더 높습니다.",
+            out.append({"text": f"차선안 {runner['id']}({runner['label']}){particle(runner['id'], '은/는')} '{diff}' 부담이 있어 추천안보다 뒤에 둡니다.",
                         "sources": sorted({s for p in gains[:2] for s in p["sources"]}) or ["D08"]})
         return out
 
@@ -477,7 +510,6 @@ class Planner:
             parts.append(f"{alt_phrase}({alt['id']}안): " + " / ".join(p["text"] for p in gains[:2]) + ".")
         if costs:
             parts.append("대신 감수하는 점: " + " / ".join(p["text"] for p in costs[:2]) + ".")
-        parts.append(f"벌점 {best['penalty']} vs {alt['penalty']}.")
         srcs = {s for p in gains[:2] + costs[:2] for s in p["sources"]} | set(extra_sources)
         return {"text": " ".join(parts), "sources": sorted(srcs or {"D08"}, key=lambda x: (x in (USER, "가정"), x))}
 
@@ -519,7 +551,7 @@ class Planner:
         rows = best["sims"]["worst"]["rows"]
         for sid, (kind, _) in best["cand"]["stop_choice"].items():
             leg = next(r for r in rows if r["type"] == "leg" and r["to"] == sid)
-            out.append({"text": f"{fmt(leg['depart'])}경 {self.stop_by_id[leg['from']]['name']}을(를) 나서기 전 최신 강수 예보 확인 → "
+            out.append({"text": f"{fmt(leg['depart'])}경 {josa(self.stop_by_id[leg['from']]['name'], '을/를')} 나서기 전 최신 강수 예보 확인 → "
                                 f"{'비가 약하면 한강 체류를 늘리고, 강하면 바로 실내 대체' if kind != 'indoor' else '비 가능성이 크게 낮아졌으면 한강 짧은 방문 검토'}",
                         "due": fmt(leg["depart"]), "sources": self.src(self.weather["sources"], "weather.rain_prob")})
         for r in rows:
@@ -532,7 +564,7 @@ class Planner:
         c = next((s for s in self.stops if "entry_deadline" in s), None)
         if c:
             leg = next(r for r in rows if r["type"] == "leg" and r["to"] == c["id"])
-            out.append({"text": f"늦어도 {fmt(leg['depart'])}에는 {c['name']}로 출발 (입장 마감 {c['entry_deadline']}, 티켓 환불 불가)", "due": fmt(leg["depart"]), "sources": c["sources"]})
+            out.append({"text": f"늦어도 {fmt(leg['depart'])}에는 {josa(c['name'], '으로/로')} 출발 (입장 마감 {c['entry_deadline']}, 티켓 환불 불가)", "due": fmt(leg["depart"]), "sources": c["sources"]})
             out.append({"text": f"공연 종료 시각과 {c['name']}→서울역 이동시간 확인 (자료에 없음, 서울역 출발 21:30)", "sources": ["D01"]})
         return out
 

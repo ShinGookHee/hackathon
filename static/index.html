@@ -359,7 +359,9 @@ async function run() {
   try {
     // rule-based result first, then the optional AI summary as a second request
     const data = await postPlan(false);
-    if (result) prevPlan = { rec: result.candidates.find((c) => c.id === result.recommended), scenario: lastScenario };
+    // after "기본값 복원" there is nothing meaningful to compare against, so the line is hidden
+    prevPlan = result && !resetting ? { rec: result.candidates.find((c) => c.id === result.recommended), scenario: lastScenario } : null;
+    deltaHidden = resetting; resetting = false;
     lastScenario = structuredClone(scenario);
     for (const k in expanded) delete expanded[k];
     result = data; selected = data.recommended;
@@ -381,6 +383,7 @@ async function run() {
 
 let runSeq = 0;
 let prevPlan = null, lastScenario = null;   // for the "직전 대비" line
+let resetting = false, deltaHidden = false;
 const expanded = {};                         // list id -> showing all items
 async function postPlan(useLlm) {
   const res = await fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -460,7 +463,7 @@ function glance(rec) {
   const keep = rec.timeline.filter((t) => t.type === "stop" && origStops.has(t.title) && !changes.some((p) => p.startsWith(t.title))).map((t) => t.title);
   const first = result.checks[0];
   const row = (k, v, cls = "") => `<div class="${cls}"><span class="k">${k}</span><span>${v}</span></div>`;
-  return `<div class="glance">${row("✔ 유지", esc(keep.join(" · ") || "없음"))}${row("↻ 변경", esc(changes.join(" / ") || "없음 — 원안 그대로"))}${first ? row("☐ 지금 확인", esc(first.text)) : ""}${row("⇄ 직전 대비", esc(deltaText(rec)), "delta")}</div>`;
+  return `<div class="glance">${row("✔ 유지", esc(keep.join(" · ") || "없음"))}${row("↻ 변경", esc(changes.join(" / ") || "없음 — 원안 그대로"))}${first ? row("☐ 지금 확인", esc(first.text)) : ""}${deltaHidden ? "" : row("⇄ 직전 대비", esc(deltaText(rec)), "delta")}</div>`;
 }
 
 function deltaText(rec) {
@@ -577,7 +580,7 @@ $("useLlm").onchange = () => {
   if ($("useLlm").checked) run();
   else { delete result.llm; renderAi(); }
 };
-$("reset").onclick = () => { invalid = {}; scenario = structuredClone(base); syncJson(); renderFields(); run(); };
+$("reset").onclick = () => { resetting = true; invalid = {}; scenario = structuredClone(base); syncJson(); renderFields(); run(); };
 $("applyJson").onclick = () => {
   try { scenario = JSON.parse($("json").value); invalid = {}; renderFields(); run(); }
   catch (e) { $("err").textContent = "JSON 파싱 오류: " + e.message; }

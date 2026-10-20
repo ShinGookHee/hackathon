@@ -11,6 +11,7 @@ import os
 import re
 
 from . import llm
+from .engine import josa
 from .scenario import validate
 
 UNAVAILABLE = "AI 해석을 사용할 수 없습니다. 왼쪽 폼에서 직접 수정해 주세요."
@@ -129,7 +130,7 @@ def coerce(path, raw):
     if v == int(v):
         v = int(v)
     if not lo <= v <= hi:
-        raise ValueError(f"{label}: {s}은(는) 허용 범위({lo}~{hi})를 벗어납니다")
+        raise ValueError(f"{label}: {josa(s, '은/는')} 허용 범위({lo}~{hi})를 벗어납니다")
     return v
 
 
@@ -165,7 +166,7 @@ def check(scenario, proposals):
         if va is not None and vb is not None and va > vb and ({a, b} & {c["path"] for c in changes}):
             bad |= {a, b}
             unmapped.append({"text": next(c["quote"] for c in changes if c["path"] in (a, b)),
-                             "reason": f"{WHITELIST[a][0]}({va})가 {WHITELIST[b][0]}({vb})보다 늦거나 큽니다"})
+                             "reason": f"{WHITELIST[a][0]} 값({va})이 {WHITELIST[b][0]} 값({vb})보다 늦거나 큽니다"})
     changes = [c for c in changes if c["path"] not in bad]
 
     trial = copy.deepcopy(scenario)
