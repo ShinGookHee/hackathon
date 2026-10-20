@@ -4,22 +4,26 @@ The engine's rule-based output is always the source of truth. This module only
 rewrites it into a short briefing; on any failure the caller keeps the
 rule-based text. Requires `pip install anthropic` and ANTHROPIC_API_KEY.
 
-Settings come from the project-root .env (ANTHROPIC_BASE_URL, ANTHROPIC_API_KEY,
-ANTHROPIC_MODEL). Don't `export` them in the shell: Claude Code reads the same names.
+Settings come from the project-root .env, or env.example when there is no .env
+(the file handed out on exam day, copied as-is). Keys: ANTHROPIC_BASE_URL,
+ANTHROPIC_API_KEY, ANTHROPIC_MODEL. Both files are git-ignored. Don't `export`
+them in the shell: Claude Code reads the same names.
 """
 import json
 import os
 import re
 from pathlib import Path
 
-ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+ROOT = Path(__file__).resolve().parent.parent
+ENV_PATHS = (ROOT / ".env", ROOT / "env.example")
 
 
-def load_env(path=ENV_PATH):
-    """Minimal python-dotenv replacement; existing environment variables win."""
-    if not path.exists():
+def load_env(paths=ENV_PATHS):
+    """Minimal python-dotenv replacement: read the first file that exists; existing environment variables win."""
+    path = next((p for p in paths if p.exists()), None)
+    if path is None:
         return
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
         key, sep, value = line.strip().partition("=")
         if sep and key and not key.startswith("#"):
             os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
