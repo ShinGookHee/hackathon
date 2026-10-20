@@ -102,7 +102,10 @@
   .card { border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; }
   .card h3 { margin: 0 0 6px; font-size: 16px; }
   .card.unc { border-left: 4px solid var(--accent); }
-  .card.ai { background: var(--bg-soft); border-color: var(--bg-soft); }
+  .card.ai { background: var(--bg-soft); border-color: var(--bg-soft); border-left: 4px solid var(--gray-2); }
+  .card.ai.pending { min-height: 280px; color: var(--gray-1); }
+  .card.ai.off { padding: 8px 14px; color: var(--gray-1); font-size: 13px; }
+  .card.ai h3 .muted { font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; font-size: 12px; font-weight: 400; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { color: var(--gray-1); font-weight: 500; }
@@ -132,7 +135,7 @@
   <h1>TripMate</h1>
   <span class="sub" id="subtitle">여행 일정 변경 대응</span>
   <span class="sp"></span>
-  <label><input type="checkbox" id="useLlm"> AI 요약</label>
+  <label><input type="checkbox" id="useLlm"> AI 브리핑</label>
   <button id="reset" class="outline">기본값 복원</button>
   <button class="primary" id="run">재계획 ▶</button>
 </header>
@@ -161,6 +164,7 @@
   <section>
     <div class="stale-note">⚠ 이전 입력 기준 결과입니다. 왼쪽 입력을 고친 뒤 재계획하세요.</div>
     <div id="banner"></div>
+    <div id="ai"></div>
     <div class="tabs" id="tabs"></div>
     <div class="tl" id="timeline"></div>
     <h2>고정 조건과 변경 가능 조건</h2>
@@ -169,7 +173,6 @@
     <div class="table-wrap"><table id="compare"></table></div>
   </section>
   <aside class="result">
-    <div id="ai"></div>
     <div class="card"><h3>추천 이유</h3><ol id="reasons"></ol></div>
     <div class="card unc"><h3>⚠ 불확실성</h3><ol id="unc"></ol></div>
     <div class="card"><h3>지금 확인할 항목</h3><ol id="checks"></ol></div>
@@ -313,7 +316,7 @@ async function run() {
     render();
     if ($("useLlm").checked) {
       try { const withAi = await postPlan(true); if (runId === runSeq) { result.llm = withAi.llm; render(); } }
-      catch (e) { if (runId === runSeq) { result.llm = { used: false, error: "AI 요약 요청 실패: " + e.message }; render(); } }
+      catch (e) { if (runId === runSeq) { result.llm = { used: false, error: "AI 브리핑 요청 실패: " + e.message }; render(); } }
     }
   } catch (e) {
     $("err").textContent = "실행 오류: " + e.message;
@@ -374,10 +377,27 @@ function render() {
       <td>${esc(c.label)} ${c.is_original ? '<span class="pill flexp">원안</span>' : ""} ${c.safe ? "" : '<span class="pill risk">⚠ 마감 위험</span>'}</td>
       <td class="num">${c.penalty}</td><td class="num">${m.buffer_worst}~${m.buffer_best}</td><td class="num">${m.rain_overlap_min}분</td><td class="num">${m.taxi_rides}</td><td class="num">${cost}</td></tr>`;
   }).join("");
-  const ai = result.llm;
-  $("ai").innerHTML = ai ? ai.pending ? `<div class="card ai muted">AI 요약 생성 중… (규칙 기반 결과는 이미 표시됨)</div>` : (ai.used
-    ? `<div class="card ai"><h3>AI 요약 <span class="muted" style="font-weight:400">(${esc(ai.model)}, 규칙 기반 결과를 요약)</span></h3><div>${esc(ai.text).replace(/\[([^\]]+)\]/g, (m, s) => chip(s))}</div></div>`
-    : `<div class="card ai muted">${esc(ai.error)}</div>`) : "";
+  renderAi();
+}
+
+// AI briefing sits right under the engine's recommendation: the verdict comes first, the explanation second.
+let llmCfg = null;
+function renderAi() {
+  const ai = result && result.llm;
+  const head = (note) => `<h3>AI 브리핑 <span class="muted">${note}</span></h3>`;
+  let html = "";
+  if (ai && ai.pending) {
+    html = `<div class="card ai pending">${head("규칙 엔진 결과를 요약하는 중")}AI 브리핑 생성 중… 아래 추천 일정과 근거는 이미 계산된 결과입니다.</div>`;
+  } else if (ai && ai.used) {
+    html = `<div class="card ai">${head(`${esc(ai.model)} · 규칙 엔진 결과를 요약, 판단은 엔진`)}<div>${esc(ai.text).replace(/\[([^\]]+)\]/g, (m, s) => chip(s))}</div></div>`;
+  } else if (ai) {
+    html = `<div class="card ai off">AI 브리핑을 표시할 수 없습니다: ${esc(ai.error)}</div>`;
+  } else if (llmCfg && !llmCfg.llm_available) {
+    html = `<div class="card ai off">AI 브리핑을 사용할 수 없습니다 (ANTHROPIC_API_KEY 또는 anthropic 패키지 없음). 아래 결과는 규칙 엔진만으로 계산되어 그대로 유효합니다.</div>`;
+  } else if (llmCfg) {
+    html = `<div class="card ai off">AI 브리핑 꺼짐 — 상단 "AI 브리핑"을 체크하면 표시됩니다.</div>`;
+  }
+  $("ai").innerHTML = html;
 }
 
 document.addEventListener("mouseover", (e) => {
@@ -435,6 +455,11 @@ $("interpret").onclick = async () => {
 };
 
 $("run").onclick = run;
+$("useLlm").onchange = () => {
+  if (!result) return;
+  if ($("useLlm").checked) run();
+  else { delete result.llm; renderAi(); }
+};
 $("reset").onclick = () => { invalid = {}; scenario = structuredClone(base); syncJson(); renderFields(); run(); };
 $("applyJson").onclick = () => {
   try { scenario = JSON.parse($("json").value); invalid = {}; renderFields(); run(); }
@@ -454,8 +479,9 @@ $("file").onchange = async (e) => {
   base = await (await fetch("/api/default")).json();
   try {
     const cfg = await (await fetch("/api/config")).json();
+    llmCfg = cfg;
     $("useLlm").checked = cfg.llm_available;
-    $("useLlm").parentElement.title = cfg.llm_available ? `AI 요약 사용 가능 (${cfg.llm_model})` : "ANTHROPIC_API_KEY가 없거나 anthropic 패키지가 없어 규칙 기반 설명만 표시합니다";
+    $("useLlm").parentElement.title = cfg.llm_available ? `AI 브리핑 사용 가능 (${cfg.llm_model})` : "ANTHROPIC_API_KEY가 없거나 anthropic 패키지가 없어 규칙 기반 결과만 표시합니다";
   } catch {}
   scenario = structuredClone(base);
   syncJson(); renderFields(); run();
