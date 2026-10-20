@@ -52,6 +52,18 @@
   details summary { cursor: pointer; color: var(--gray-1); margin-top: 16px; }
   .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
   .err { color: var(--accent); font-weight: 600; white-space: pre-wrap; }
+  .update { margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .update textarea { height: 64px; font: inherit; resize: vertical; }
+  .update .row { justify-content: flex-end; }
+  .interp { margin-top: 8px; font-size: 12px; }
+  .interp p { margin: 4px 0; color: var(--ink-2); }
+  .interp table { font-size: 12px; margin: 6px 0; }
+  .interp td, .interp th { padding: 4px; }
+  .interp td.q { color: var(--gray-1); }
+  .interp th:last-child, .interp td:last-child { white-space: nowrap; text-align: center; }
+  .interp .applied { color: var(--ink-2); font-weight: 600; }
+  .unm { margin-top: 6px; padding: 6px 8px; background: var(--bg-soft); border-radius: 4px; }
+  .unm ul { margin: 4px 0 0; padding-left: 16px; }
   .stale-note { display: none; margin: 0 0 10px; padding: 6px 10px; background: var(--bg-soft); border-left: 4px solid var(--gray-2); color: var(--ink-2); font-size: 13px; }
   body.stale .stale-note { display: block; }
   body.stale main > section > :not(.stale-note), body.stale aside.result { opacity: .4; }
@@ -126,6 +138,12 @@
 </header>
 <main>
   <aside class="inputs">
+    <div class="update">
+      <h2>상황 업데이트 <span class="muted">AI가 입력값 변경안으로 해석</span></h2>
+      <textarea id="updText" maxlength="500" placeholder="예: 지하철이 40~50분 늦는대 / 비가 그쳤어 / 공연 입장 마감이 18:20으로 당겨졌대" aria-label="상황 업데이트"></textarea>
+      <div class="row"><button id="interpret">AI로 해석</button></div>
+      <div class="interp" id="interp"></div>
+    </div>
     <div class="err" id="err"></div>
     <div id="fields"></div>
     <p class="muted" style="font-size:12px"><span class="dot"></span> 표시와 회색 배경 칸은 기본 자료(D01~D08)와 다른 값입니다. 결과에서는 <span class="chip user">입력값</span> 근거로 표시됩니다. 시간은 24시간제 HH:MM(예: 15:00)으로 입력합니다.</p>
@@ -372,6 +390,49 @@ document.addEventListener("mouseover", (e) => {
   tip.style.left = Math.min(r.left, innerWidth - 380) + "px";
   tip.style.top = (r.bottom + 6) + "px";
 });
+
+let interp = null;   // last /api/interpret response
+function renderInterp() {
+  if (!interp) { $("interp").innerHTML = ""; return; }
+  const ch = interp.changes, done = interp.applied;
+  let html = `<p>${esc(interp.message)}</p>`;
+  if (ch.length) {
+    html += `<table><tr><th>항목</th><th>현재값 → 제안값</th><th>근거 문장</th><th>적용</th></tr>` + ch.map((c, i) =>
+      `<tr><td>${esc(c.label)}${c.estimated ? ' <span class="badge warn">⚠ 추정</span>' : ""}</td>
+        <td>${esc(c.current)} → <b>${esc(c.proposed)}</b></td><td class="q">“${esc(c.quote)}”</td>
+        <td><input type="checkbox" data-i="${i}" ${c.estimated ? "" : "checked"} ${done ? "disabled" : ""} aria-label="${esc(c.label)} 적용"></td></tr>`).join("") + "</table>";
+    html += done ? `<p class="applied">✓ ${done}건 적용 후 재계획했습니다. 바뀐 값은 결과에서 <span class="chip user">입력값</span> 근거로 표시됩니다.</p>`
+      : `<p class="muted">추정 값은 기본으로 체크 해제되어 있습니다. 확인한 항목만 체크하세요.</p><div class="row"><button class="primary" id="applyInterp">적용 후 재계획</button></div>`;
+  }
+  if (interp.unmapped.length) {
+    html += `<div class="unm"><b>반영하지 못한 내용</b><ul>${interp.unmapped.map((u) => `<li>“${esc(u.text)}” — ${esc(u.reason)}</li>`).join("")}</ul></div>`;
+  }
+  $("interp").innerHTML = html;
+  const btn = $("applyInterp");
+  if (btn) btn.onclick = () => {
+    const picked = [...$("interp").querySelectorAll("input[type=checkbox]:checked")].map((el) => ch[+el.dataset.i]);
+    if (!picked.length) { $("err").textContent = "적용할 항목을 하나 이상 체크하세요."; return; }
+    picked.forEach((c) => { resolve(scenario, c.path, c.proposed); delete invalid[c.path]; });
+    interp.applied = picked.length;
+    syncJson(); renderFields(); renderInterp(); run();
+  };
+}
+
+$("interpret").onclick = async () => {
+  const text = $("updText").value.trim();
+  if (!text) { interp = { message: "상황을 한 문장 이상 입력해 주세요.", changes: [], unmapped: [] }; return renderInterp(); }
+  $("interpret").disabled = true;
+  $("interp").innerHTML = '<p class="muted">AI가 해석하는 중…</p>';
+  try {
+    const res = await fetch("/api/interpret", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, scenario }) });
+    const data = await res.json();
+    interp = res.ok ? data : { message: data.error || "해석 요청 실패", changes: [], unmapped: [] };
+  } catch (e) {
+    interp = { message: "AI 해석을 사용할 수 없습니다. 왼쪽 폼에서 직접 수정해 주세요.", changes: [], unmapped: [] };
+  } finally { $("interpret").disabled = false; }
+  renderInterp();
+};
 
 $("run").onclick = run;
 $("reset").onclick = () => { invalid = {}; scenario = structuredClone(base); syncJson(); renderFields(); run(); };

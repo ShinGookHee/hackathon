@@ -9,7 +9,7 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from tripmate import engine, llm
+from tripmate import engine, interpret, llm
 from tripmate.scenario import DEFAULT_PATH, load, validate
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -35,7 +35,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {"error": "not found"})
 
     def do_POST(self):
-        if self.path != "/api/plan":
+        if self.path not in ("/api/plan", "/api/interpret"):
             return self._send(404, {"error": "not found"})
         try:
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
@@ -45,6 +45,8 @@ class Handler(BaseHTTPRequestHandler):
         errors = validate(scenario)
         if errors:
             return self._send(400, {"error": " / ".join(errors)})
+        if self.path == "/api/interpret":
+            return self._send(200, interpret.interpret(body.get("text"), scenario))
         try:
             result = engine.plan(scenario, load(DEFAULT_PATH))
         except (KeyError, ValueError, TypeError, IndexError, StopIteration) as e:
