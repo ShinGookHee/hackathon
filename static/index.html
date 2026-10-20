@@ -129,7 +129,15 @@
   .pill.risk { background: var(--accent-tint); color: var(--accent); }
   .muted { color: var(--gray-1); }
   .table-wrap { overflow-x: auto; }
-  #tip { position: fixed; max-width: 360px; background: var(--ink); color: var(--bg); padding: 8px 10px; border-radius: 6px; font-size: 12px; pointer-events: none; display: none; z-index: 20; }
+  #tip { position: fixed; max-width: 380px; background: var(--ink); color: var(--bg); padding: 8px 10px; border-radius: 6px; font-size: 12px; line-height: 1.5; white-space: pre-line; pointer-events: none; display: none; z-index: 20; }
+  /* timeline: one grouped evidence chip that opens a popover */
+  button.chip.grp { font: inherit; font-size: 11px; line-height: 1.5; padding: 0 6px; border-radius: 4px; background: var(--bg-soft); color: var(--ink-2); border: 1px solid var(--bg-soft); cursor: pointer; white-space: nowrap; }
+  button.chip.grp.user { border-color: var(--accent); }
+  button.chip.grp.assume { border: 1px dashed var(--gray-2); }
+  button.chip.grp[aria-expanded="true"] { border-color: var(--ink-2); }
+  /* lists and the constraint table: named chips aligned to the end of the line */
+  .srcs { display: block; text-align: right; margin-top: 2px; line-height: 1.4; }
+  .srcs .chip { font-size: 10px; margin: 1px 0 0 3px; }
 
   @media (max-width: 1100px) {
     main { grid-template-columns: 320px minmax(0, 1fr); }
@@ -315,13 +323,26 @@ function syncJson() {
   $("jsonSum").textContent = `전체 시나리오 JSON (고급 · 장소 ${scenario.stops?.length ?? 0}곳, 이동 ${scenario.legs?.length ?? 0}구간)`;
 }
 
-function chip(s) {
-  const doc = result?.documents?.[s];
+const SOURCE_NAMES = { D01: "일정", D02: "예약", D03: "이동시간", D04: "날씨", D05: "시설공지", D06: "교통", D07: "선호", D08: "주의" };
+const named = (s) => SOURCE_NAMES[s] ? `${s} ${SOURCE_NAMES[s]}` : s;
+const tipText = (s) => result?.documents?.[s] ||
+  (s === "입력값" ? "사용자가 기본 자료와 다르게 입력한 값" : s === "가정" ? "제공 자료에 없어 가정한 값 (입력 폼에서 수정 가능)" : s);
+
+function chip(s, withName = false) {
   const cls = s === "입력값" ? "user" : s === "가정" ? "assume" : "";
-  const tip = doc || (s === "입력값" ? "사용자가 기본 자료와 다르게 입력한 값" : s === "가정" ? "제공 자료에 없어 가정한 값 (입력 폼에서 수정 가능)" : s);
-  return `<span class="chip ${cls}" data-tip="${esc(s + ": " + tip)}">${esc(s)}</span>`;
+  return `<span class="chip ${cls}" data-tip="${esc(named(s) + ": " + tipText(s))}">${esc(withName ? named(s) : s)}</span>`;
 }
-const chips = (arr) => (arr || []).map(chip).join("");
+const chips = (arr) => (arr || []).map((s) => chip(s)).join("");
+// "D04 날씨" style, right-aligned under the text (reason/uncertainty/check lists, constraint table)
+const srcChips = (arr) => arr && arr.length ? `<span class="srcs">${arr.map((s) => chip(s, true)).join("")}</span>` : "";
+// timeline: a single "근거 N" chip; '입력값'/'가정' stay visible on the chip itself
+function chipGroup(arr) {
+  if (!arr || !arr.length) return "";
+  const special = ["입력값", "가정"].filter((s) => arr.includes(s));
+  const cls = special.includes("입력값") ? "user" : special.length ? "assume" : "";
+  const tip = arr.map((s) => `${named(s)} – ${tipText(s)}`).join("\n");
+  return `<button type="button" class="chip grp ${cls}" data-tip="${esc(tip)}" aria-expanded="false" aria-label="근거 ${arr.length}개 보기">근거 ${arr.length}${special.length ? " · " + special.join(" · ") : ""}</button>`;
+}
 
 async function run() {
   $("err").textContent = "";
@@ -386,13 +407,13 @@ function render() {
   const cur = result.candidates.find((c) => c.id === selected);
   $("timeline").innerHTML = `<p class="muted" style="margin:0 0 8px">${esc(cur.label)} — 시간은 <b>이동이 빠를 때~늦을 때</b> 범위입니다.</p>` + cur.timeline.map((t) => {
     if (t.type === "leg") {
-      return `<div class="tl-item"><div class="tl-time">${t.time}</div><div class="block leg">${t.mode === "taxi" ? "🚕" : "🚇"} ${esc(t.title)} · ${esc(t.detail)} ${chips(t.sources)}
+      return `<div class="tl-item"><div class="tl-time">${t.time}</div><div class="block leg">${t.mode === "taxi" ? "🚕" : "🚇"} ${esc(t.title)} · ${esc(t.detail)} ${chipGroup(t.sources)}
         ${(t.flags || []).map((f) => `<span class="badge warn">⚠ ${esc(f)}</span>`).join("")}</div></div>`;
     }
     const cls = t.constraint === "hard" ? "hard" : "flex";
     return `<div class="tl-item"><div class="tl-time">${t.time}${t.end ? "<br>~ " + t.end : ""}</div>
       <div class="block ${cls} ${t.changed ? "changed" : ""}">
-        <div class="t">${t.constraint === "hard" ? "🔒" : "◌"} ${esc(t.title)} ${chips(t.sources)}</div>
+        <div class="t">${t.constraint === "hard" ? "🔒" : "◌"} ${esc(t.title)} ${chipGroup(t.sources)}</div>
         ${t.detail ? `<div class="d">${esc(t.detail)}${t.arrive && t.arrive !== t.time ? ` · 도착 ${t.arrive}` : ""}</div>` : ""}
         <span class="badge ${t.constraint === "hard" ? "lock" : ""}">${t.constraint === "hard" ? "고정" : "변경 가능"}</span>
         ${t.changed ? '<span class="badge chg">변경됨</span>' : ""}
@@ -403,13 +424,13 @@ function render() {
   shortList("unc", result.uncertainties);
   shortList("checks", result.checks);
   $("penSum").textContent = `선택한 안(${cur.id})의 감점 내역 ${cur.penalties.length}건`;
-  $("pen").innerHTML = cur.penalties.length ? cur.penalties.map((p) => `<li>${esc(p.text)} <span class="muted">(+${p.points})</span> ${chips(p.sources)}</li>`).join("") : "<li class='muted'>감점 없음</li>";
+  $("pen").innerHTML = cur.penalties.length ? cur.penalties.map((p) => `<li>${esc(p.text)} <span class="muted">(+${p.points})</span> ${srcChips(p.sources)}</li>`).join("") : "<li class='muted'>감점 없음</li>";
   const nFixed = result.constraints.filter((c) => c.type === "고정").length;
   $("consTitle").textContent = `고정 조건과 변경 가능 조건 (고정 ${nFixed} · 변경 가능 ${result.constraints.length - nFixed})`;
   const orig = result.candidates.find((c) => c.is_original);
   $("cmpSum").innerHTML = `후보 ${result.candidates.length}개 비교 <span class="muted">추천 ${rec.id} 1위${orig ? ` · 원안 ${orig.id} ${orig.rank}위` : ""}</span>`;
   $("constraints").innerHTML = "<tr><th>항목</th><th>구분</th><th>조건</th><th>이유</th></tr>" + result.constraints.map((c) =>
-    `<tr><td>${esc(c.name)} ${chips(c.sources)}</td><td><span class="pill ${c.type === "고정" ? "fixed" : "flexp"}">${c.type}</span></td><td>${esc(c.rule)}</td><td class="muted">${esc(c.why)}</td></tr>`).join("");
+    `<tr><td>${esc(c.name)} ${srcChips(c.sources)}</td><td><span class="pill ${c.type === "고정" ? "fixed" : "flexp"}">${c.type}</span></td><td>${esc(c.rule)}</td><td class="muted">${esc(c.why)}</td></tr>`).join("");
   $("compare").innerHTML = "<tr><th>순위</th><th>안</th><th>구성</th><th class='num'>벌점</th><th class='num'>여유(분)</th><th class='num'>우중 야외</th><th class='num'>택시</th><th class='num'>교통비</th></tr>" + [...result.candidates].sort((a, b) => a.rank - b.rank).map((c) => {
     const m = c.metrics;
     const cost = m.cost_krw[0] === m.cost_krw[1] ? m.cost_krw[0].toLocaleString() : `${m.cost_krw[0].toLocaleString()}~${m.cost_krw[1].toLocaleString()}`;
@@ -423,7 +444,7 @@ function render() {
 const LIST_LIMIT = 3;
 function shortList(id, arr) {
   const all = expanded[id];
-  $(id).innerHTML = arr.map((r, i) => `<li ${i >= LIST_LIMIT && !all ? "hidden" : ""}>${esc(r.text)} ${chips(r.sources)}</li>`).join("");
+  $(id).innerHTML = arr.map((r, i) => `<li ${i >= LIST_LIMIT && !all ? "hidden" : ""}>${esc(r.text)} ${srcChips(r.sources)}</li>`).join("");
   const btn = $(id + "-more"), extra = arr.length - LIST_LIMIT;
   btn.hidden = extra <= 0;
   btn.textContent = all ? "접기" : `더 보기 (+${extra})`;
@@ -478,16 +499,34 @@ function renderAi() {
   if ($("aiMore")) $("aiMore").onclick = () => { aiOpen = !aiOpen; renderAi(); };
 }
 
-document.addEventListener("mouseover", (e) => {
-  const t = e.target.closest("[data-tip]");
+let pinned = null;   // grouped chip whose popover was opened by click/Enter
+function showTip(t) {
   const tip = $("tip");
-  if (!t) { tip.style.display = "none"; return; }
   tip.textContent = t.dataset.tip;
   tip.style.display = "block";
   const r = t.getBoundingClientRect();
-  tip.style.left = Math.min(r.left, innerWidth - 380) + "px";
-  tip.style.top = (r.bottom + 6) + "px";
+  tip.style.left = Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8)) + "px";
+  tip.style.top = (r.bottom + 6 + tip.offsetHeight > innerHeight ? Math.max(8, r.top - 6 - tip.offsetHeight) : r.bottom + 6) + "px";
+}
+function hideTip() {
+  $("tip").style.display = "none";
+  if (pinned) pinned.setAttribute("aria-expanded", "false");
+  pinned = null;
+}
+document.addEventListener("mouseover", (e) => {
+  if (pinned) return;
+  const t = e.target.closest("[data-tip]");
+  if (t) showTip(t); else $("tip").style.display = "none";
 });
+document.addEventListener("click", (e) => {
+  const g = e.target.closest("button.chip.grp");
+  if (g) {
+    const reopen = pinned !== g;
+    hideTip();
+    if (reopen) { pinned = g; g.setAttribute("aria-expanded", "true"); showTip(g); }
+  } else if (pinned) hideTip();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && pinned) hideTip(); });
 
 let interp = null;   // last /api/interpret response
 function renderInterp() {
