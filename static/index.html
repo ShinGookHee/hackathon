@@ -111,6 +111,10 @@
   .glance div { margin: 2px 0; display: flex; gap: 6px; }
   .glance .k { flex: 0 0 82px; font-weight: 600; color: var(--ink); }
   .glance .delta, .glance .delta .k { color: var(--gray-1); }
+  .share { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+  .share button { font-size: 13px; padding: 4px 10px; border-color: var(--ink); }
+  .share .status { font-size: 12px; color: var(--ink-2); }
+  .share textarea { flex-basis: 100%; height: 210px; font: 12px/1.5 -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; background: var(--bg); }
   details.sec { margin-top: 20px; }
   details.sec > summary, details.more > summary, details.card > summary { cursor: pointer; font-family: Georgia, serif; font-size: 15px; font-weight: 600; color: var(--ink); padding: 4px 0; }
   details.card > summary { font-size: 16px; }
@@ -364,6 +368,7 @@ async function run() {
     deltaHidden = resetting; resetting = false;
     lastScenario = structuredClone(scenario);
     for (const k in expanded) delete expanded[k];
+    shareState = null;
     result = data; selected = data.recommended;
     document.body.classList.remove("stale");
     if ($("useLlm").checked) result.llm = { pending: true };
@@ -404,6 +409,7 @@ function render() {
   $("banner").innerHTML = result.status === "infeasible"
     ? `<div class="banner infeasible">⚠ 확정 조건을 모두 지키는 안 없음 – 위반이 가장 적은 안: ${rec.id}<b>${esc(rec.label)}</b>${viol}${glance(rec)}</div>`
     : `<div class="banner ${result.status}">★ 추천안 ${rec.id} · ${msg}<b>${esc(rec.label)}</b>${viol}${glance(rec)}</div>`;
+  $("shareBtn").onclick = share;
   $("tabs").innerHTML = result.candidates.map((c) =>
     `<button class="tab ${c.id === selected ? "active" : ""} ${c.id === result.recommended ? "rec" : ""}" data-id="${c.id}" title="${esc(c.label)}">${c.id === result.recommended ? '<span class="star">★</span> ' : ""}${c.id}${c.is_original ? " (원안)" : ""}${c.safe ? "" : " ⚠"}</button>`).join("");
   $("tabs").querySelectorAll(".tab").forEach((b) => b.onclick = () => { selected = b.dataset.id; render(); });
@@ -454,16 +460,59 @@ function shortList(id, arr) {
   btn.onclick = () => { expanded[id] = !all; shortList(id, arr); };
 }
 
-// "한눈에 보기" + "직전 대비", built only from the /api/plan response
-function glance(rec) {
+// kept / changed vs the original plan, shared by "한눈에 보기" and the share text
+function glanceData(rec) {
   const orig = result.candidates.find((c) => c.is_original) || rec;
   const parts = (c) => c.label.split(" + ");
   const changes = parts(rec).filter((p) => !parts(orig).includes(p));
   const origStops = new Set(orig.timeline.filter((t) => t.type === "stop").map((t) => t.title));
   const keep = rec.timeline.filter((t) => t.type === "stop" && origStops.has(t.title) && !changes.some((p) => p.startsWith(t.title))).map((t) => t.title);
+  return { keep, changes };
+}
+
+// "한눈에 보기" + "직전 대비", built only from the /api/plan response
+function glance(rec) {
+  const { keep, changes } = glanceData(rec);
   const first = result.checks[0];
   const row = (k, v, cls = "") => `<div class="${cls}"><span class="k">${k}</span><span>${v}</span></div>`;
-  return `<div class="glance">${row("✔ 유지", esc(keep.join(" · ") || "없음"))}${row("↻ 변경", esc(changes.join(" / ") || "없음 — 원안 그대로"))}${first ? row("☐ 지금 확인", esc(first.text)) : ""}${deltaHidden ? "" : row("⇄ 직전 대비", esc(deltaText(rec)), "delta")}</div>`;
+  const shareBox = `<div class="share"><button type="button" id="shareBtn">일행에게 공유 ⧉</button>` +
+    (shareState ? `<span class="status" id="shareStatus">${esc(shareState.status)}</span><textarea id="shareText" readonly aria-label="공유 문구 미리보기">${esc(shareState.text)}</textarea>` : "") + `</div>`;
+  return `<div class="glance">${row("✔ 유지", esc(keep.join(" · ") || "없음"))}${row("↻ 변경", esc(changes.join(" / ") || "없음 — 원안 그대로"))}${first ? row("☐ 지금 확인", esc(first.text)) : ""}${deltaHidden ? "" : row("⇄ 직전 대비", esc(deltaText(rec)), "delta")}</div>${shareBox}`;
+}
+
+// plain-text summary for the group chat, generated only from the current /api/plan response
+let shareState = null;   // { text, status } while the preview is open
+function shareText() {
+  const rec = result.candidates.find((c) => c.id === result.recommended);
+  const { keep, changes } = glanceData(rec);
+  const kind = (u) => u.sources.includes("가정") ? "가정" : /예보/.test(u.text) ? "예보" : "추정";
+  const firstSentence = (t) => t.split(". ")[0].replace(/\.$/, "");
+  const L = [];
+  if (result.status === "infeasible") L.push("⚠ 확정 조건을 모두 지키는 안 없음");
+  else if (result.status === "risky") L.push("⚠ 이동이 늦어지면 확정 조건을 넘길 수 있음");
+  L.push(`[TripMate] 일정 변경 제안 (추천안 ${rec.id})`);
+  rec.violations.forEach((v) => L.push(`  · ${v.name} ${v.limit}: ${v.over_best ? `빠르면 ${v.over_best}분` : "빠르면 지킬 수 있으나"}, 늦으면 ${v.over_worst}분 초과`));
+  L.push(`✔ 유지: ${keep.join(", ") || "없음"}`);
+  L.push(`↻ 변경: ${changes.join(" / ") || "없음 (원안 그대로)"}`);
+  L.push("🕒 일정:");
+  rec.timeline.filter((t) => t.type !== "leg").forEach((t) => L.push(`  ${t.time}  ${t.constraint === "hard" ? "🔒" : "◌"} ${t.title}`));
+  L.push("⚠ 예보·추정:");
+  result.uncertainties.slice(0, 2).forEach((u) => L.push(`  - ${firstSentence(u.text)} (${kind(u)})`));
+  L.push("☐ 확인:");
+  result.checks.slice(0, 2).forEach((c) => L.push(`  - ${c.text}`));
+  return L.join("\n");
+}
+
+async function share() {
+  shareState = { text: shareText(), status: "복사하는 중…" };
+  render();
+  let copied = false;
+  try { await navigator.clipboard.writeText(shareState.text); copied = true; }
+  catch { const ta = $("shareText"); ta.focus(); ta.select(); try { copied = document.execCommand("copy"); } catch {} }
+  shareState.status = copied ? "✓ 클립보드에 복사했습니다. 아래에서 내용을 확인할 수 있습니다."
+    : "자동 복사가 되지 않아 아래 내용을 선택해 두었습니다. Ctrl+C로 복사하세요.";
+  $("shareStatus").textContent = shareState.status;
+  if (!copied) $("shareText").select();
 }
 
 function deltaText(rec) {
