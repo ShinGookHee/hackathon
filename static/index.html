@@ -103,7 +103,19 @@
   .card h3 { margin: 0 0 6px; font-size: 16px; }
   .card.unc { border-left: 4px solid var(--accent); }
   .card.ai { background: var(--bg-soft); border-color: var(--bg-soft); border-left: 4px solid var(--gray-2); }
-  .card.ai.pending { min-height: 280px; color: var(--gray-1); }
+  .card.ai.pending { min-height: 132px; color: var(--gray-1); }
+  .card.ai .brief { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .card.ai.open .brief { display: block; }
+  .linkbtn { border: none; background: none; padding: 0; margin-top: 4px; color: var(--accent); font-size: 12px; cursor: pointer; text-decoration: underline; }
+  .glance { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+  .glance div { margin: 2px 0; display: flex; gap: 6px; }
+  .glance .k { flex: 0 0 82px; font-weight: 600; color: var(--ink); }
+  .glance .delta, .glance .delta .k { color: var(--gray-1); }
+  details.sec { margin-top: 20px; }
+  details.sec > summary, details.more > summary, details.card > summary { cursor: pointer; font-family: Georgia, serif; font-size: 15px; font-weight: 600; color: var(--ink); padding: 4px 0; }
+  details.card > summary { font-size: 16px; }
+  details.more { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 6px; }
+  details.more > summary .muted, details.sec > summary .muted { font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; font-size: 12px; font-weight: 400; }
   .card.ai.off { padding: 8px 14px; color: var(--gray-1); font-size: 13px; }
   .card.ai h3 .muted { font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; font-size: 12px; font-weight: 400; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -151,7 +163,7 @@
     <div id="fields"></div>
     <p class="muted" style="font-size:12px"><span class="dot"></span> 표시와 회색 배경 칸은 기본 자료(D01~D08)와 다른 값입니다. 결과에서는 <span class="chip user">입력값</span> 근거로 표시됩니다. 시간은 24시간제 HH:MM(예: 15:00)으로 입력합니다.</p>
     <details>
-      <summary>전체 시나리오 JSON (고급)</summary>
+      <summary id="jsonSum">전체 시나리오 JSON (고급)</summary>
       <textarea id="json"></textarea>
       <div class="row">
         <button id="applyJson">JSON 적용</button>
@@ -167,16 +179,19 @@
     <div id="ai"></div>
     <div class="tabs" id="tabs"></div>
     <div class="tl" id="timeline"></div>
-    <h2>고정 조건과 변경 가능 조건</h2>
+    <h2 id="consTitle">고정 조건과 변경 가능 조건</h2>
     <div class="table-wrap"><table id="constraints"></table></div>
-    <h2>후보 비교 <span class="muted" style="text-transform:none">(안 이름 A~F는 입력이 바뀌어도 고정, 순위는 벌점이 낮은 순, 여유 = 공연 입장 마감까지 최악~최선)</span></h2>
-    <div class="table-wrap"><table id="compare"></table></div>
+    <details class="sec">
+      <summary><span id="cmpSum">후보 비교</span></summary>
+      <p class="muted" style="font-size:12px;margin:4px 0">안 이름 A~F는 입력이 바뀌어도 고정, 순위는 벌점이 낮은 순, 여유 = 공연 입장 마감까지 최악~최선</p>
+      <div class="table-wrap"><table id="compare"></table></div>
+    </details>
   </section>
   <aside class="result">
-    <div class="card"><h3>추천 이유</h3><ol id="reasons"></ol></div>
-    <div class="card unc"><h3>⚠ 불확실성</h3><ol id="unc"></ol></div>
-    <div class="card"><h3>지금 확인할 항목</h3><ol id="checks"></ol></div>
-    <div class="card"><h3>선택한 안의 감점 내역</h3><ol id="pen"></ol></div>
+    <div class="card"><h3>추천 이유</h3><ol id="reasons"></ol><button class="linkbtn" id="reasons-more" hidden></button></div>
+    <div class="card unc"><h3>⚠ 불확실성</h3><ol id="unc"></ol><button class="linkbtn" id="unc-more" hidden></button></div>
+    <div class="card"><h3>지금 확인할 항목</h3><ol id="checks"></ol><button class="linkbtn" id="checks-more" hidden></button></div>
+    <details class="card"><summary id="penSum">선택한 안의 감점 내역</summary><ol id="pen"></ol></details>
   </aside>
 </main>
 <div id="tip"></div>
@@ -199,15 +214,16 @@ const FIELDS = [
     ["공연 입장 마감", "stops#C.entry_deadline", "time", "D02"],
     ["판단 시각 (환불 기한 확인용)", "meta.decision_time", "time", "D02", "미술관 환불 기한(09:30)이 지났는지 판단하는 데만 씁니다. 이 시각 이후부터 다시 계획하지는 않습니다."],
   ]],
-  ["일행 선호", [
+  ["일행 선호 · 가정값", [
     ["교통비 예산(원)", "preferences.budget_krw", "number", "D07"],
     ["택시 최대 횟수", "preferences.max_taxi_rides", "number", "D07"],
     ["우천 시 야외 최대(분)", "preferences.max_outdoor_in_rain_min", "number", "D07"],
     ["우천 판단 기준 %", "preferences.rain_prob_threshold", "number", "가정", "이 강수확률 이상이면 '비 가능성 높음'으로 판단"],
     ["공연 여유 목표(분)", "preferences.target_buffer_min", "number", "가정", "공연 입장 마감 전에 남기고 싶은 여유 시간"],
     ["택시 1회 요금 (원)", ["taxi.fare_per_ride_krw.0", "taxi.fare_per_ride_krw.1"], "number", "가정"],
-  ]],
+  ], "collapse"],
 ];
+let moreOpen = false;   // user opened "세부 설정" themselves
 
 let base = null, scenario = null, result = null, selected = null;
 let invalid = {};   // path -> raw text that failed validation (kept out of the scenario)
@@ -245,7 +261,8 @@ function fieldLabel(path) {
 }
 
 function renderFields() {
-  const html = FIELDS.map(([title, rows]) => `<h2>${title}</h2>` + rows.map(([label, paths, type, src, hint]) => {
+  const html = FIELDS.map(([title, rows, collapse]) => {
+    const body = rows.map(([label, paths, type, src, hint]) => {
     const list = Array.isArray(paths) ? paths : [paths];
     const inputs = list.map((p, i) => {
       const v = resolve(scenario, p);
@@ -262,8 +279,16 @@ function renderFields() {
       ? `<div class="msg">⚠ ${type === "time" ? "24시간제 HH:MM 형식으로 입력하세요 (예: 15:00)" : "숫자를 입력하세요"}</div>` : "";
     const stack = list.length > 1 || label.length > 12 ? "stack" : "";
     return `<div class="field ${stack}"><label ${hint ? `title="${esc(hint)}"` : ""}>${label} <span class="src">${src}</span></label><div class="pair">${inputs}</div>${msg}</div>`;
-  }).join("")).join("");
+    }).join("");
+    if (!collapse) return `<h2>${title}</h2>` + body;
+    // auto-open when anything inside differs from the default or is invalid
+    const paths = rows.flatMap(([, ps]) => Array.isArray(ps) ? ps : [ps]);
+    const auto = paths.some((p) => p in invalid || JSON.stringify(resolve(scenario, p)) !== JSON.stringify(resolve(base, p)));
+    return `<details class="more" ${moreOpen || auto ? "open" : ""}><summary>세부 설정 <span class="muted">${title} ${rows.length}개${auto ? " · 기본값과 다른 값 있음" : ""}</span></summary>${body}</details>`;
+  }).join("");
   $("fields").innerHTML = html;
+  const more = $("fields").querySelector("details.more");
+  if (more) more.querySelector("summary").addEventListener("click", () => { moreOpen = !more.open; });
   $("fields").querySelectorAll("input").forEach((el) => el.addEventListener("change", () => {
     const p = el.dataset.path, raw = el.value.trim();
     let v;
@@ -285,7 +310,10 @@ function renderFields() {
   }));
 }
 
-function syncJson() { $("json").value = JSON.stringify(scenario, null, 2); }
+function syncJson() {
+  $("json").value = JSON.stringify(scenario, null, 2);
+  $("jsonSum").textContent = `전체 시나리오 JSON (고급 · 장소 ${scenario.stops?.length ?? 0}곳, 이동 ${scenario.legs?.length ?? 0}구간)`;
+}
 
 function chip(s) {
   const doc = result?.documents?.[s];
@@ -310,21 +338,29 @@ async function run() {
   try {
     // rule-based result first, then the optional AI summary as a second request
     const data = await postPlan(false);
+    if (result) prevPlan = { rec: result.candidates.find((c) => c.id === result.recommended), scenario: lastScenario };
+    lastScenario = structuredClone(scenario);
+    for (const k in expanded) delete expanded[k];
     result = data; selected = data.recommended;
     document.body.classList.remove("stale");
     if ($("useLlm").checked) result.llm = { pending: true };
     render();
-    if ($("useLlm").checked) {
-      try { const withAi = await postPlan(true); if (runId === runSeq) { result.llm = withAi.llm; render(); } }
-      catch (e) { if (runId === runSeq) { result.llm = { used: false, error: "AI 브리핑 요청 실패: " + e.message }; render(); } }
-    }
   } catch (e) {
     $("err").textContent = "실행 오류: " + e.message;
     if (result) document.body.classList.add("stale");
+    return;
   } finally { $("run").disabled = false; }
+  // the briefing loads in the background; a newer run (runSeq) discards this response
+  if ($("useLlm").checked) {
+    const mine = result;
+    try { const withAi = await postPlan(true); if (runId === runSeq && result === mine) { result.llm = withAi.llm; renderAi(); } }
+    catch (e) { if (runId === runSeq && result === mine) { result.llm = { used: false, error: "AI 브리핑 요청 실패: " + e.message }; renderAi(); } }
+  }
 }
 
 let runSeq = 0;
+let prevPlan = null, lastScenario = null;   // for the "직전 대비" line
+const expanded = {};                         // list id -> showing all items
 async function postPlan(useLlm) {
   const res = await fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ scenario, use_llm: useLlm }) });
@@ -342,8 +378,8 @@ function render() {
   const viol = rec.violations.length ? `<ul>${rec.violations.map((v) =>
     `<li>${esc(v.name)} ${v.limit}: ${v.over_best ? `빠르면 ${v.over_best}분` : "빠르면 지킬 수 있으나"}, 늦으면 ${v.over_worst}분 초과</li>`).join("")}</ul>` : "";
   $("banner").innerHTML = result.status === "infeasible"
-    ? `<div class="banner infeasible">⚠ 확정 조건을 모두 지키는 안 없음 – 위반이 가장 적은 안: ${rec.id}<b>${esc(rec.label)}</b>${viol}</div>`
-    : `<div class="banner ${result.status}">★ 추천안 ${rec.id} · ${msg}<b>${esc(rec.label)}</b>${viol}</div>`;
+    ? `<div class="banner infeasible">⚠ 확정 조건을 모두 지키는 안 없음 – 위반이 가장 적은 안: ${rec.id}<b>${esc(rec.label)}</b>${viol}${glance(rec)}</div>`
+    : `<div class="banner ${result.status}">★ 추천안 ${rec.id} · ${msg}<b>${esc(rec.label)}</b>${viol}${glance(rec)}</div>`;
   $("tabs").innerHTML = result.candidates.map((c) =>
     `<button class="tab ${c.id === selected ? "active" : ""} ${c.id === result.recommended ? "rec" : ""}" data-id="${c.id}" title="${esc(c.label)}">${c.id === result.recommended ? '<span class="star">★</span> ' : ""}${c.id}${c.is_original ? " (원안)" : ""}${c.safe ? "" : " ⚠"}</button>`).join("");
   $("tabs").querySelectorAll(".tab").forEach((b) => b.onclick = () => { selected = b.dataset.id; render(); });
@@ -363,11 +399,15 @@ function render() {
         ${(t.flags || []).map((f) => `<span class="badge warn">⚠ ${esc(f)}</span>`).join("")}
       </div></div>`;
   }).join("");
-  const li = (arr) => arr.map((r) => `<li>${esc(r.text)} ${chips(r.sources)}</li>`).join("");
-  $("reasons").innerHTML = li(result.reasons);
-  $("unc").innerHTML = li(result.uncertainties);
-  $("checks").innerHTML = li(result.checks);
+  shortList("reasons", result.reasons);
+  shortList("unc", result.uncertainties);
+  shortList("checks", result.checks);
+  $("penSum").textContent = `선택한 안(${cur.id})의 감점 내역 ${cur.penalties.length}건`;
   $("pen").innerHTML = cur.penalties.length ? cur.penalties.map((p) => `<li>${esc(p.text)} <span class="muted">(+${p.points})</span> ${chips(p.sources)}</li>`).join("") : "<li class='muted'>감점 없음</li>";
+  const nFixed = result.constraints.filter((c) => c.type === "고정").length;
+  $("consTitle").textContent = `고정 조건과 변경 가능 조건 (고정 ${nFixed} · 변경 가능 ${result.constraints.length - nFixed})`;
+  const orig = result.candidates.find((c) => c.is_original);
+  $("cmpSum").innerHTML = `후보 ${result.candidates.length}개 비교 <span class="muted">추천 ${rec.id} 1위${orig ? ` · 원안 ${orig.id} ${orig.rank}위` : ""}</span>`;
   $("constraints").innerHTML = "<tr><th>항목</th><th>구분</th><th>조건</th><th>이유</th></tr>" + result.constraints.map((c) =>
     `<tr><td>${esc(c.name)} ${chips(c.sources)}</td><td><span class="pill ${c.type === "고정" ? "fixed" : "flexp"}">${c.type}</span></td><td>${esc(c.rule)}</td><td class="muted">${esc(c.why)}</td></tr>`).join("");
   $("compare").innerHTML = "<tr><th>순위</th><th>안</th><th>구성</th><th class='num'>벌점</th><th class='num'>여유(분)</th><th class='num'>우중 야외</th><th class='num'>택시</th><th class='num'>교통비</th></tr>" + [...result.candidates].sort((a, b) => a.rank - b.rank).map((c) => {
@@ -380,8 +420,45 @@ function render() {
   renderAi();
 }
 
+const LIST_LIMIT = 3;
+function shortList(id, arr) {
+  const all = expanded[id];
+  $(id).innerHTML = arr.map((r, i) => `<li ${i >= LIST_LIMIT && !all ? "hidden" : ""}>${esc(r.text)} ${chips(r.sources)}</li>`).join("");
+  const btn = $(id + "-more"), extra = arr.length - LIST_LIMIT;
+  btn.hidden = extra <= 0;
+  btn.textContent = all ? "접기" : `더 보기 (+${extra})`;
+  btn.onclick = () => { expanded[id] = !all; shortList(id, arr); };
+}
+
+// "한눈에 보기" + "직전 대비", built only from the /api/plan response
+function glance(rec) {
+  const orig = result.candidates.find((c) => c.is_original) || rec;
+  const parts = (c) => c.label.split(" + ");
+  const changes = parts(rec).filter((p) => !parts(orig).includes(p));
+  const origStops = new Set(orig.timeline.filter((t) => t.type === "stop").map((t) => t.title));
+  const keep = rec.timeline.filter((t) => t.type === "stop" && origStops.has(t.title) && !changes.some((p) => p.startsWith(t.title))).map((t) => t.title);
+  const first = result.checks[0];
+  const row = (k, v, cls = "") => `<div class="${cls}"><span class="k">${k}</span><span>${v}</span></div>`;
+  return `<div class="glance">${row("✔ 유지", esc(keep.join(" · ") || "없음"))}${row("↻ 변경", esc(changes.join(" / ") || "없음 — 원안 그대로"))}${first ? row("☐ 지금 확인", esc(first.text)) : ""}${row("⇄ 직전 대비", esc(deltaText(rec)), "delta")}</div>`;
+}
+
+function deltaText(rec) {
+  if (!prevPlan) return "첫 계산입니다. 입력을 바꿔 재계획하면 직전 결과와 비교합니다.";
+  const diffs = [];
+  for (const [, rows] of FIELDS) for (const [label, paths] of rows) {
+    const list = Array.isArray(paths) ? paths : [paths];
+    const a = list.map((p) => resolve(prevPlan.scenario, p)), b = list.map((p) => resolve(scenario, p));
+    if (JSON.stringify(a) !== JSON.stringify(b)) diffs.push(`${label} ${a.join("~")}→${b.join("~")}`);
+  }
+  const input = diffs.length ? diffs.slice(0, 2).join(", ") + (diffs.length > 2 ? ` 외 ${diffs.length - 2}건` : "") : "입력 변화 없음";
+  const p = prevPlan.rec, bw = (c) => c.metrics.buffer_worst;
+  const plan = p.id !== rec.id ? `추천 ${p.id} → ${rec.id}` : `추천 ${rec.id} 유지`;
+  const buf = bw(p) !== bw(rec) ? `, 공연 여유(최악) ${bw(p)}→${bw(rec)}분` : "";
+  return `${input} ⇒ ${plan}${buf}`;
+}
+
 // AI briefing sits right under the engine's recommendation: the verdict comes first, the explanation second.
-let llmCfg = null;
+let llmCfg = null, aiOpen = false;
 function renderAi() {
   const ai = result && result.llm;
   const head = (note) => `<h3>AI 브리핑 <span class="muted">${note}</span></h3>`;
@@ -389,7 +466,7 @@ function renderAi() {
   if (ai && ai.pending) {
     html = `<div class="card ai pending">${head("규칙 엔진 결과를 요약하는 중")}AI 브리핑 생성 중… 아래 추천 일정과 근거는 이미 계산된 결과입니다.</div>`;
   } else if (ai && ai.used) {
-    html = `<div class="card ai">${head(`${esc(ai.model)} · 규칙 엔진 결과를 요약, 판단은 엔진`)}<div>${esc(ai.text).replace(/\[([^\]]+)\]/g, (m, s) => chip(s))}</div></div>`;
+    html = `<div class="card ai ${aiOpen ? "open" : ""}">${head(`${esc(ai.model)} · 규칙 엔진 결과를 요약, 판단은 엔진`)}<div class="brief">${esc(ai.text).replace(/\[([^\]]+)\]/g, (m, s) => chip(s))}</div><button class="linkbtn" id="aiMore">${aiOpen ? "접기" : "더 보기"}</button></div>`;
   } else if (ai) {
     html = `<div class="card ai off">AI 브리핑을 표시할 수 없습니다: ${esc(ai.error)}</div>`;
   } else if (llmCfg && !llmCfg.llm_available) {
@@ -398,6 +475,7 @@ function renderAi() {
     html = `<div class="card ai off">AI 브리핑 꺼짐 — 상단 "AI 브리핑"을 체크하면 표시됩니다.</div>`;
   }
   $("ai").innerHTML = html;
+  if ($("aiMore")) $("aiMore").onclick = () => { aiOpen = !aiOpen; renderAi(); };
 }
 
 document.addEventListener("mouseover", (e) => {
